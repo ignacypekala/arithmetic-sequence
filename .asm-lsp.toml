@@ -1,0 +1,20 @@
+[default_config]
+version = "0.10.1"
+assembler = "nasm"
+instruction_set = "x86-64"
+
+[default_config.opts]
+diagnostics = true
+default_diagnostics = true
+
+[[project]]
+path = "arithmetic_sequence.asm"
+version = "0.10.1"
+assembler = "nasm"
+instruction_set = "x86-64"
+
+[project.opts]
+compiler = "nasm"
+compile_flags_txt = ["-f", "elf64", "-w+all", "-w+error"]
+diagnostics = true
+default_diagnostics = false
