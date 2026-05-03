@@ -39,10 +39,11 @@ arithmetic_sequence:
     ; r10 == n, rcx == 0
 
     ; [REDACT] Now we will turn a_k into its absolute value so that multiplying gets easier.
+    ; Create a mask for negating.
     mov r11, [rdx + r10 * 8 - 8]
     sar r11, 63
     
-; for (int i = 0; i < n; i++) {a_k[i] <-- abs(a_k[i])}
+; for (int i = 0; i < n; i++) {a_k[i] <-- |a_k[i]|}
 .turn_ak_absolute:
     xor [rdx + r10 * 8 - 8], r11
     inc rcx
@@ -50,10 +51,18 @@ arithmetic_sequence:
     jnz .turn_ak_absolute
 
     ; rcx == n, r10 == 0 
+
+    ; Add 1 if a_k was negative
+    neg r11
+    add [rdx + rcx * 8 - 8], r11
+
+
+    ; Now that a_k = |a_1 - a_0| we can do (n - 1) * |a_1 - a_0|
+
     sub rcx, 1
 
-    ; a_0 is no longer needed but rax will be used by imul.
-    mov rdi, rax
+    ; a_0 is no longer needed but rdx will be used by imul.
+    mov rdi, rdx
     xor r11, r11
 
 ; for (int i = 0; i <= n - 1; i++) {...}
