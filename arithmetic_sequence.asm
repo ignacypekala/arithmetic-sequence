@@ -63,7 +63,7 @@ arithmetic_sequence:
 
     ; Add 1 if a_k was negative
     neg r12
-    add [rdx + rcx * 8 - 8], r12
+    add [rdx], r12
 
     ; rcx == n, r10 == 0, {r9, ...r_k} == |a_1 - a_0|
 
@@ -106,7 +106,7 @@ arithmetic_sequence:
     jnz .revert_absolute
     
     neg r12
-    add [rdi + rcx * 8 - 8], r12
+    add [rdi], r12
     
 
     ; Clear the flags before addition
