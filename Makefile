@@ -20,7 +20,7 @@ arithmetic_sequence.o: arithmetic_sequence.asm
 arithmetic_sequence_example_c: arithmetic_sequence_example_c.o arithmetic_sequence.o
 	$(CC) -z noexecstack -o $@ $^
 
-arithmetic_sequence_example_c.o: arithmetic_sequence_example.c
+arithmetic_sequence_example_c.o: arithmetic_sequence_example.c test_data.c
 	$(CC) -c $(CFLAGS) -o $@ $< 
 
 arithmetic_sequence_example_cpp: arithmetic_sequence_example_cpp.o arithmetic_sequence.o 
