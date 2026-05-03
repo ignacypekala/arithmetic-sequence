@@ -8,7 +8,7 @@ arithmetic_sequence:
     ; rcx - n (unsigned)
     ; r8 - k (signed)
 
-    ; A0 and A1 are signed integers (two's complement). 
+    ; a_0 and a_1 are signed integers (two's complement). 
     ; Their difference can cause a signed overflow, requiring an extra (n+1)-th limb.
     ; We compute this virtual limb by sign-extending the highest limbs of A0 and A1
     ; and subtracting them (with borrow) to prepend the correct sign mask 
@@ -34,8 +34,10 @@ arithmetic_sequence:
     dec rcx
     jnz .compute_common_difference
 
-    ; Subtract the sign-extensions with borrow from the last iteration
+    ; Subtract the sign-extensions with borrow from the last iteration.
     sbb rax, r11
+
+    sub rcx, 1
 
     mov rdx, 0
     ; mov rax, 0
