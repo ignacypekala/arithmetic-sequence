@@ -13,16 +13,16 @@ arithmetic_sequence:
     ; rcx - n
     ; r8 - k
 
-    ; Zeroing r10 for iteration clearing the CF flag, which causes sbb to act
-    ; as sub on first iteration.
+    ; Zeroing r10 for iteration clears the CF flag, which causes sbb to act
+    ; as sub on the first iteration.
     xor r10, r10
 
+; while (rcx > 0) { ...; i++; rcx--; }
 .compute_common_difference:
     ; a_k[i] <-- a_1[i] - a_0[i]
     mov r9, [rsi + r10 * 8]
     sbb r9,[rdi + r10 * 8]
     mov [rdx + r10 * 8], r9
-
     ; Double iterators eliminate the need for cmp, which would 
     ; overwrite the CF flag.
     inc r10
