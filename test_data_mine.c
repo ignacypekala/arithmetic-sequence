@@ -8,6 +8,22 @@ static const test_data_t test_data_table[] = {
         { 0, 0 },
     },
     {
+        (uint64_t[1]) { 0 },
+        (uint64_t[1]) { UINT64_MAX },
+        (uint64_t[1]) { UINT64_MAX },
+        1,
+        1,
+        { 0, 0 },
+    },
+    {
+        (uint64_t[1]) { UINT64_MAX },
+        (uint64_t[1]) { 0 },
+        (uint64_t[1]) { -UINT64_MAX },
+        1,
+        1,
+        { UINT64_MAX, UINT64_MAX },
+    },
+    {
         (uint64_t[1]) { 1 },
         (uint64_t[1]) { 2 },
         (uint64_t[1]) { -6 },
@@ -39,4 +55,20 @@ static const test_data_t test_data_table[] = {
         4,
         { 0, 0 },
     },
+    {
+        (uint64_t[4]) { UINT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX },
+        (uint64_t[4]) { UINT64_MAX - 1, UINT64_MAX, UINT64_MAX, UINT64_MAX },
+        (uint64_t[4]) { UINT64_MAX - 1, UINT64_MAX, UINT64_MAX, UINT64_MAX },
+        4,
+        1,
+        { 0, 0 },
+    },
+    { 
+        (uint64_t[2]) { 1, 0 },
+        (uint64_t[2]) { 0 , 0x8000000000000000 },
+        (uint64_t[2]) { 0 },
+        2,
+        1,
+        { 0, 0 }
+    }
 };
