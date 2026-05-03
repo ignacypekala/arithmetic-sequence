@@ -38,13 +38,13 @@ int main()
 
         printf("n  = %zu\nk  = %016" PRIx64 " (%" PRId64 ")\nA0 = ", n, (uint64_t)t->k, t->k);
         for (size_t i = n; i-- > 0;)
-            printf("%016" PRIx64, t->A0[i]);
+            printf("%016" PRIx64 " ", t->A0[i]);
         printf("\nA1 = ");
         for (size_t i = n; i-- > 0;)
-            printf("%016" PRIx64, t->A1[i]);
-        printf("\nAk = %016" PRIx64 "%016" PRIx64, t->result.hi, t->result.lo);
+            printf("%016" PRIx64 " ", t->A1[i]);
+        printf("\nAk = %016" PRIx64 " %016" PRIx64 " ", t->result.hi, t->result.lo);
         for (size_t i = n; i-- > 0;)
-            printf("%016" PRIx64, t->Ak[i]);
+            printf("%016" PRIx64 " ", t->Ak[i]);
         printf("\n");
 
         uint64_t* A0 = calloc(n, sizeof(uint64_t));
@@ -72,9 +72,9 @@ int main()
         if (pass) {
             printf("PASS\n");
         } else {
-            printf("FAIL %016" PRIx64 "%016" PRIx64, result.hi, result.lo);
+            printf("FAIL %016" PRIx64  " %016" PRIx64 " ", result.hi, result.lo);
             for (size_t i = n; i-- > 0;)
-                printf("%016" PRIx64, Ak[i]);
+                printf("%016" PRIx64 " ", Ak[i]);
             printf("\n");
             return_code = 1;
         }
