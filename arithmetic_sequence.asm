@@ -48,8 +48,41 @@ arithmetic_sequence:
     sbb r9, r11 
 
 
-; Now multiply
+    ; Using unsigned multiplication to multiply (a_1 - a_0)*(k - 1).
+    ; Because we're interpeting signed integers as unsigned there is a potential
+    ; error but it will be nullified by further subtraction.
 
+    dec r8 ; r8 == (k - 1)
+    mov rdi, rax ; Discarding a_0 to hold *a_k
+    ; Clears the flags and r11 for multiplication
+    xor r11, r11 
+    ; rax and rdx will be used during multiplication
+    ; r8 holds the multiplier (k - 1)
+    ; rdi holds *a_k
+    ; r11 will hold the carry between multiplications
+
+.multiply_common_difference_by_index:
+    mov rax, [rdi + rcx * 8]
+    mul r8
+    add rax, r11
+    ; Include the carry from the addition to the current multiplication carry.
+    adc rdx, 0 
+    mov [rdi + rcx * 8], rax
+    mov r11, rdx
+    inc rcx
+    dec r10
+    jnz .multiply_common_difference_by_index
+
+    ; Manually multiply the most-significant limb stored in r9
+    mov rax, r9
+    mul r8
+    ; Include the carry putting the output in rax (low) and rdx (high)
+    add rax, r11
+    adc rdx, 0
+
+    ; Now (a_1 - a_0)*(k - 1) is stored across {rdx, rax, ...a_k}, provided
+    ; that both (a_1 - a_0) and (k - 1) are positive.
+    ; TODO Subtract the errors
 
     ; Clear the flags before addition
     xor rdx, rdx
