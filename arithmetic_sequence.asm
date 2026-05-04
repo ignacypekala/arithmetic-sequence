@@ -1,140 +1,184 @@
 global arithmetic_sequence
 
 arithmetic_sequence:
+    ; Author: Ignacy Pękała
+    ; Calculates the element k-th element of an arithmetic sequence a_n.
+    ; Takes the first two elements of the sequence, space for 64*n least
+    ; significant bits of the output, n - the unsigned number of limbs of a_0,
+    ; a_1 and a_k, and k - the signed index of the desired element.
+    ;
     ; Parameters:
-    ; rdi - *a_0 (2s complement)
-    ; rsi - *a_1 (2s complement)
+    ; rdi - *a_0 (two's complement)
+    ; rsi - *a_1 (two's complement)
     ; rdx - *a_k (no important input)
-    ; rcx - n (unsigned)
-    ; r8 - k (signed)
+    ; rcx -  n (unsigned)
+    ; r8  -  k (signed)
+    ;
     ; Registers:
-    ; r10/rcx - iteration
-    ; r9, r11, r12, r13, rax, rdx - math
-    
+    ; r9, rcx - current limb index (i) and remaining limb counter
+    ;           (roles alternate per loop)
+    ; r10, r11, r12, r13, rax, rdx - math
+    ; 
+    ; Note: 
+    ; The notation "{A, B, ...}" is used to denote a concatenated
+    ; number, where A is the most significant limb. 
+    ; Additionally array[i] is often used to denote accessing the ith element
+    ; of an array i.e. the i-th limb.
+    ;
+    ; Return values
+    ; {rdx, rax, [rdi], [rdi + 8], ...} = a_k
+    ; Note: rdi above refers to the initial value - the pointer to a_k's n least significant limbs.
+    ; 
+    ; Ensure ABI compliance by preserving the value of callee-saved registers.
     push r12
     push r13
     push r14
 
-    ; The difference (a_1 - a_0) can cause an overflow, requiring an extra
-    ; (n+1)-th limb. We compute this virtual limb by sign-extending the highest
-    ; limbs of A0 and A1 and subtracting them (with borrow) to prepend the 
-    ; correct sign mask (0x0000000000000000 or 0xffffffffffffffff) 
-    ; before multiplying.
+    ;
+    ; Calculate the common difference of the arithmetic sequence by
+    ; performing limb-by-limb subtraction (a_1 - a_0). The n least significant
+    ; limbs are kept in the memory for a_k, while the additional (n + 1)-th limb
+    ; is stored in the r10 register.
+    ;
+    ; Because the subtraction signed integers (a_1 - a_0) can spill into the
+    ; register for the (n + 1)-th limb it has to be filled with 0s or 1s
+    ; depending on the sign of their difference.
+    ;
 
-    ; r11, r9 - masks for the virtual limb of a_0 and a_1 respectively
-    mov r11, [rdi + rcx * 8 - 8]
-    mov r9, [rsi + rcx * 8 - 8]
-    sar r11, 63
-    sar r9, 63
+    mov r11, [rdi + rcx * 8 - 8]       ; Take the most signifcant bit of a_0.
+    sar r11, 63                        ; Extend the sign bit across the entire register.
+    mov r10, [rsi + rcx * 8 - 8]       ; Take the most signifcant bit of a_1.
+    sar r10, 63                        ; Extend the sign bit across the entire register.
 
-    ; Zeroing r10 for iteration clears the CF flag, which prevents sbb from
-    ; including any borrow in the first iteration.
+    xor r9, r9                         ; Reset r9 and the flags so that sbb starts with no borrow.
 
-    ; r10 - limb index for the .compute_common_difference loop (i)
-    xor r10, r10
+;
+; while (rcx > 0) { a_k[i] = a_1[i] - a_0[i] - borrow; }
+;
+.calculate_common_difference:
+    mov rax, [rsi + r9 * 8]            ; Take i-th limb of a_1.
+    sbb rax, [rdi + r9 * 8]            ; Subtract the i-th limb of a_0.
+    mov [rdx + r9 * 8], rax            ; Write the result to the i-th limb of a_k.
 
-; Perform subtraction (a_1 - a_0) limb by limb. The output is written into a_k.
-; while (rcx > 0) { ...; i++; rcx--; }
-.compute_common_difference:
-    ; a_k[i] <-- a_1[i] - a_0[i]
-    ; rax - used for subtraction
-    mov rax, [rsi + r10 * 8]
-    sbb rax, [rdi + r10 * 8]
-    mov [rdx + r10 * 8], rax
-    ; This approach eliminates the need for cmp which would overwrite CF.
-    inc r10
-    dec rcx
-    jnz .compute_common_difference
+    ; This approach to iteration eliminates the need for cmp which would overwrite CF.
+    inc r9                             ; i++
+    dec rcx                            ; n--
+    jnz .calculate_common_difference
 
-    ; r9 now holds the most-significant limb of a_k.
-    sbb r9, r11 
+    sbb r10, r11                       ; Propagate final loop borrow into the sign-extended (n+1)-th limb.
 
-    ; Using unsigned multiplication to multiply (a_1 - a_0)*(k - 1).
-    ; Because we're interpeting signed integers as unsigned there is a potential
-    ; error but it will be nullified by further subtraction.
+    ;
+    ; Now that the subtraction is complete:
+    ; {r10, [rsi], [rsi + 8], ...} = (a_1 - a_0)
+    ;
+    ; The number (a_1 - a_0) will now be multiplied by (k - 1) using unsigned
+    ; multiplication, while any introduced error will be subtracted in the proccess.
+    ; 
+    ; The possible error stems from the fact that a negative x interpreted as
+    ; an unsigned integer equals to (x + 2^(64 * N)), where N is x's number of limbs. 
+    ; Therefore two, non-mutually-exclusive scenarios have to be taken into account:
+    ; Let D = (a_1 - a_0), M = (k - 1)
+    ; - D is negative:
+    ;       (D + 2^(64 * n)) * M = D * M + 2^(64 * n) * M
+    ;       and the result needs correction by 2^(64 * n) * M
+    ; - M is negative:
+    ;       for each limb i: 
+    ;           D[i] * (M + 2^64) = D[i] * M + D[i] * 2^64
+    ;           D[i] needs a correction by 2^64 * a_k[i]
+    ;
 
-    dec r8 ; r8 == (k - 1)
-    mov rdi, rdx ; Discarding a_0 to hold *a_k
+    dec r8                             ; Get the index offset of a_k.
+    mov rdi, rdx                       ; Discarding a_0 to hold *a_k.
 
-    ; Create an error nullifier based on *a_k's sign
-    mov r12, [rdi + r10 * 8 - 8]
-    sar r12, 63
-    ; r12 now contains 1 if a_k was negative and 0 otherwise
+    mov r12, [rdi + r9 * 8 - 8]        ; Take the most significant limb of (a_1 - a_0).
+    sar r12, 63                        ; Extend the sign across the entire register.
 
-    ; Create a mask based on the multiplier
-    mov r13, r8
-    sar r13, 63
+    mov r13, r8                        ; Take the multiplier (k - 1).
+    sar r13, 63                        ; Extend the sign across the entire register.
 
-    ; Clears the flags and r11 for multiplication
-    xor r11, r11 
-    ; rax and rdx will be used during multiplication
-    ; r8 holds the multiplier (k - 1)
-    ; rdi holds *a_k
-    ; r11 will hold the carry between multiplications
+    xor r11, r11                       ; Clear the flags and r11 for multiplication.
 
-.multiply_common_difference_by_index:
-    ; Perform unsigned multplication of (a_k[i] * (k - 1)) while preserving the
-    ; carry for a_k[i + 1].
-    mov rax, [rdi + rcx * 8]
-    mov r14, rax ; Save a_k[i] to later subtract from rdx
-    mul r8
-    ; Absorb the previous carry
-    add rax, r11 
-    ; Include the carry from the addition to the current multiplication carry.
-    adc rdx, 0
-    mov [rdi + rcx * 8], rax
+;
+; Registers:
+;  - rax and rdx will be used as accumulators during multiplication,
+;  - r8          holds the multiplier (k - 1),
+;  - rdi         holds *a_k,
+;  - r11         will hold the carry between multiplications,
+;  - rcx         holds the limb index (0 -> n),
+;  - r9          holds the remaining limb count (n -> 0).
+; 
+; while (n > 0) {
+;   a_k[i] = (a_1 - a_0)[i] * (k - 1) + carry;
+;   if ((a_1 - a_0) < 0) {
+;     carry -= (a_1 - a_0)[i];
+;   }
+;   i++; n--;
+;  }
+;
+.multiply_common_difference_by_index_offset:
+    mov rax, [rdi + rcx * 8]           ; Take the i-th limb of (a_1 - a_0).
+    mov r14, rax                       ; Save it for later subtraction from the carry.
+    mul r8                             ; Multiply it by the index offset.
+    add rax, r11                       ; Absorb the previous carry from multiplication.
+    adc rdx, 0                         ; Pass the carry from addition.
+    mov [rdi + rcx * 8], rax           ; Save the lower limb.
     
-    ; Subtract a_k[i] from the carry if the multiplier was negative
-    and r14, r13
-    sub rdx, r14
-    ; Pass the carry for the next iteration
-    mov r11, rdx
+    and r14, r13                       ; Get the i-th limb of (a_1 - a_0) if the entire number was negative.
+    sub rdx, r14                       ; Subtract the correction from the carry.
+    mov r11, rdx                       ; Pass the carry for the next iteration.
 
-    inc rcx
-    dec r10
-    jnz .multiply_common_difference_by_index
+    inc rcx                            ; i++
+    dec r9                             ; n--
+    jnz .multiply_common_difference_by_index_offset
 
-    ; Manually multiply the most-significant limb stored in r9
-    mov rax, r9
-    mul r8
-    ; Include the carry putting the output in rax (low) and rdx (high)
-    add rax, r11
-    adc rdx, 0
+    ; The current most significant limb ((n + 1)-st) will now be multiplied manually .
 
-    ; Now (a_1 - a_0)*(k - 1) is stored across {rdx, rax, ...a_k}, provided
-    ; that both (a_1 - a_0) and (k - 1) are positive.
+    mov rax, r10                       ; Take the (n + 1)-st limb.
+    mul r8                             ; Multiply it by the index offset.
+    add rax, r11                       ; Absorb the previous carry from multiplication.
+    adc rdx, 0                         ; Pass the carry from addition to the (n + 2)-nd limb.
 
-    ; If (a_1 - a_0) was negative we subtract 2^(64*n) from a_k by decrementing
-    ; the n+1th limb and include the borrow in rdx.
-    and r8, r12
-    sub rax, r8
-    sbb rdx, 0
+    and r10, rax                       ; Get the (n + 1)-st limb if (a_1 - a_0) was negative.
+    sub rdx, r10                       ; Subtract the correction from the (n + 2)-nd limb.
 
-    ; Clear the flags before addition
-    xor r8, r8
+    ; Now the result will be corrected if the index offset was negative.
 
-; Finally add a_1
-; rdi - holds the pointer to a_k
-; rsi - holds the pointer to a_1
-; r8 - used during addition
-; r10 == 0, rcx == n, {rdx, rax, ...a_k} = (k - 1) * |a_1 - a_0|
+    and r8, r12                        ; Get the index offset if it was negative.
+    sub rax, r8                        ; Subtract it from the (n + 1)-th limb.
+    sbb rdx, 0                         ; Pass the borrow to the (n + 2)-nd limb.
+
+    ;
+    ; The multiplication is complete and the result can
+    ; be increased by a_1 to calculate the final a_k.
+    ; 
+    
+    xor r8, r8                         ; Clear the flags before addition.
+
+;
+; Registers:
+;  - {rdx, rax, [rdi], [rdi + 8], ...} = (a_1 - a_0)(k - 1),
+;  - rsi holds the pointer to a_1,
+;  - rcx holds the remaining limb count (n -> 0),
+;  - r9  holds the limb index (0 -> n).
+;
+; while (n > 0) {
+;   a_k[i] += a_1[i] + carry;
+;   i++;
+;   n--;
+; }
 .add_a1_to_result:
-    mov r8, [rdi + r10 * 8]
-    adc r8, [rsi + r10 * 8]
-    mov [rdi + r10 * 8], r8
-    inc r10
-    dec rcx
+    mov r8, [rdi + r9 * 8]             ; Take the i-th limb of a_k.
+    adc r8, [rsi + r9 * 8]             ; Add the i-th limb of a_1 with carry.
+    mov [rdi + r9 * 8], r8             ; Save the result to a_k[i].
+
+    inc r9                             ; i++
+    dec rcx                            ; n--
     jnz .add_a1_to_result
 
-    adc rax, 0
-    adc rdx, 0
-    
-    ; mov rax, 0
-    ; Return values
-    ; rax - lo
-    ; rdx - hi
-    ; [rdi] - a_k
+    adc rax, 0                         ; Absorb the carry from the last addition
+    adc rdx, 0                         ; Absorb the carry from the previous addition
 
+    ; To ensure ABI compliance pop the callee-saved registers back from the stack
     pop r14
     pop r13
     pop r12
