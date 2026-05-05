@@ -138,7 +138,7 @@ arithmetic_sequence:
     add rax, r11                       ; Absorb the previous carry from multiplication.
     adc rdx, 0                         ; Pass the carry from addition to the (n + 2)-nd limb.
 
-    and r10, rax                       ; Get the (n + 1)-st limb if (a_1 - a_0) was negative.
+    and r10, r13                       ; Get the (n + 1)-st limb if (a_1 - a_0) was negative.
     sub rdx, r10                       ; Subtract the correction from the (n + 2)-nd limb.
 
     ; Now the result will be corrected if the index offset was negative.
