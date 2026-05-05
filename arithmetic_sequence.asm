@@ -72,13 +72,13 @@ arithmetic_sequence:
     ; Now that the subtraction is complete:
     ; (r10:[rsi]:[rsi + 8]:...) = (a_1 - a_0)
     ;
-    ; The number (a_1 - a_0) will now be multiplied by (k - 1) using unsigned
+    ; The number (a_1 - a_0) will now be multiplied by (k) using unsigned
     ; multiplication, while any introduced error will be subtracted in the proccess.
     ; 
     ; The possible error stems from the fact that a negative x interpreted as
     ; an unsigned integer equals to (x + 2^(64 * N)), where N is x's number of limbs. 
     ; Therefore two, non-mutually-exclusive scenarios have to be taken into account:
-    ; Let D = (a_1 - a_0), M = (k - 1)
+    ; Let D = (a_1 - a_0), M = k
     ; - D is negative:
     ;       (D + 2^(64 * n)) * M = D * M + 2^(64 * n) * M
     ;       and the result needs correction by 2^(64 * n) * M
@@ -88,13 +88,12 @@ arithmetic_sequence:
     ;           D[i] needs a correction by 2^64 * a_k[i]
     ;
 
-    dec r8                             ; Get the index offset of a_k.
-    mov rdi, rdx                       ; Discarding a_0 to hold *a_k.
+    mov rsi, rdx                       ; Discard a_1 to hold *a_k.
 
-    mov r12, [rdi + r9 * 8 - 8]        ; Take the most significant limb of (a_1 - a_0).
+    mov r12, [rsi + r9 * 8 - 8]        ; Take the most significant limb of (a_1 - a_0).
     sar r12, 63                        ; Extend the sign across the entire register.
 
-    mov r13, r8                        ; Take the multiplier (k - 1).
+    mov r13, r8                        ; Take the multiplier (k).
     sar r13, 63                        ; Extend the sign across the entire register.
 
     xor r11, r11                       ; Clear the flags and r11 for multiplication.
@@ -102,14 +101,14 @@ arithmetic_sequence:
 ;
 ; Registers:
 ;  - rax and rdx will be used as accumulators during multiplication,
-;  - r8          holds the multiplier (k - 1),
-;  - rdi         holds *a_k,
+;  - r8          holds the multiplier (k),
+;  - rsi         holds *a_k,
 ;  - r11         will hold the carry between multiplications,
 ;  - rcx         holds the limb index (0 -> n),
 ;  - r9          holds the remaining limb count (n -> 0).
 ; 
 ; while (n > 0) {
-;   a_k[i] = (a_1 - a_0)[i] * (k - 1) + carry;
+;   a_k[i] = (a_1 - a_0)[i] * (k) + carry;
 ;   if ((a_1 - a_0) < 0) {
 ;     carry -= (a_1 - a_0)[i];
 ;   }
@@ -117,7 +116,7 @@ arithmetic_sequence:
 ;  }
 ;
 .multiply_common_difference_by_index_offset:
-    mov rax, [rdi + rcx * 8]           ; Take the i-th limb of (a_1 - a_0).
+    mov rax, [rsi + rcx * 8]           ; Take the i-th limb of (a_1 - a_0).
     mov r14, rax                       ; Save it for later subtraction from the carry.
     mul r8                             ; Multiply it by the index offset.
 
@@ -125,12 +124,12 @@ arithmetic_sequence:
     ; from the previous limb may be negative. To correctly add it to the 128-bit 
     ; accumulator (rdx:rax), we must sign-extend r11 into a temporary register (r15)
     ; to act as the upper 64 bits during the subsequent addition.
-    mov r15, r11                       ; Copy the 64-bit carry.
+    mov r15, r11                       ; Copy the carry.
     sar r15, 63                        ; Sign-expand it.
 
     add rax, r11                       ; Absorb the previous carry from multiplication.
     adc rdx, r15                       ; Pass the carry from addition with carry nullifier.
-    mov [rdi + rcx * 8], rax           ; Save the lower limb.
+    mov [rsi + rcx * 8], rax           ; Save the lower limb.
     
     and r14, r13                       ; Get the i-th limb of (a_1 - a_0) if the entire number was negative.
     sub rdx, r14                       ; Subtract the correction from the carry.
@@ -147,7 +146,7 @@ arithmetic_sequence:
 
     ; Just as in the last loop, the incoming 64-bit carry variable (r11) may be 
     ; negative. We apply the same 128-bit adapter pattern here to safely absorb it.
-    mov r15, r11                       ; Copy the leftover 64-bit carry.
+    mov r15, r11                       ; Copy the leftover carry.
     sar r15, 63                        ; Sign-extend it.
 
     add rax, r11                       ; Absorb the previous carry from multiplication.
@@ -171,7 +170,7 @@ arithmetic_sequence:
 
 ;
 ; Registers:
-;  - (rdx:rax:[rdi]:[rdi + 8]:...) = (a_1 - a_0)(k - 1),
+;  - (rdx:rax:[rsi]:[rsi + 8]:...) = (a_1 - a_0)(k),
 ;  - rsi holds the pointer to a_1,
 ;  - rcx holds the remaining limb count (n -> 0),
 ;  - r9  holds the limb index (0 -> n).
@@ -182,9 +181,9 @@ arithmetic_sequence:
 ;   n--;
 ; }
 .add_a1_to_result:
-    mov r8, [rdi + r9 * 8]             ; Take the i-th limb of a_k.
-    adc r8, [rsi + r9 * 8]             ; Add the i-th limb of a_1 with carry.
-    mov [rdi + r9 * 8], r8             ; Save the result to a_k[i].
+    mov r8, [rsi + r9 * 8]             ; Take the i-th limb of a_k.
+    adc r8, [rdi + r9 * 8]             ; Add the i-th limb of a_0 with carry.
+    mov [rsi + r9 * 8], r8             ; Save the result to a_k[i].
 
     inc r9                             ; i++
     dec rcx                            ; n--
