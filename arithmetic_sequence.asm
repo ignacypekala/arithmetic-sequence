@@ -20,19 +20,20 @@ arithmetic_sequence:
     ; r10, r11, r12, r13, rax, rdx - math
     ; 
     ; Note: 
-    ; The notation "{A, B, ...}" is used to denote a concatenated
+    ; The notation "(A:B:...)" is used to denote a concatenated
     ; number, where A is the most significant limb. 
     ; Additionally array[i] is often used to denote accessing the ith element
     ; of an array i.e. the i-th limb.
     ;
     ; Return values
-    ; {rdx, rax, [rdi], [rdi + 8], ...} = a_k
+    ; (rdx:rax:[rdi]:[rdi + 8]:...) = a_k
     ; Note: rdi above refers to the initial value - the pointer to a_k's n least significant limbs.
     ; 
     ; Ensure ABI compliance by preserving the value of callee-saved registers.
     push r12
     push r13
     push r14
+    push r15
 
     ;
     ; Calculate the common difference of the arithmetic sequence by
@@ -69,7 +70,7 @@ arithmetic_sequence:
 
     ;
     ; Now that the subtraction is complete:
-    ; {r10, [rsi], [rsi + 8], ...} = (a_1 - a_0)
+    ; (r10:[rsi]:[rsi + 8]:...) = (a_1 - a_0)
     ;
     ; The number (a_1 - a_0) will now be multiplied by (k - 1) using unsigned
     ; multiplication, while any introduced error will be subtracted in the proccess.
@@ -119,8 +120,16 @@ arithmetic_sequence:
     mov rax, [rdi + rcx * 8]           ; Take the i-th limb of (a_1 - a_0).
     mov r14, rax                       ; Save it for later subtraction from the carry.
     mul r8                             ; Multiply it by the index offset.
+
+    ; Due to the error-correction subtraction, the 64-bit carry variable (r11) 
+    ; from the previous limb may be negative. To correctly add it to the 128-bit 
+    ; accumulator (rdx:rax), we must sign-extend r11 into a temporary register (r15)
+    ; to act as the upper 64 bits during the subsequent addition.
+    mov r15, r11                       ; Copy the 64-bit carry.
+    sar r15, 63                        ; Sign-expand it.
+
     add rax, r11                       ; Absorb the previous carry from multiplication.
-    adc rdx, 0                         ; Pass the carry from addition.
+    adc rdx, r15                       ; Pass the carry from addition with carry nullifier.
     mov [rdi + rcx * 8], rax           ; Save the lower limb.
     
     and r14, r13                       ; Get the i-th limb of (a_1 - a_0) if the entire number was negative.
@@ -131,12 +140,18 @@ arithmetic_sequence:
     dec r9                             ; n--
     jnz .multiply_common_difference_by_index_offset
 
-    ; The current most significant limb ((n + 1)-st) will now be multiplied manually .
+    ; The current most significant limb ((n + 1)-st) will now be multiplied manually.
 
     mov rax, r10                       ; Take the (n + 1)-st limb.
     mul r8                             ; Multiply it by the index offset.
+
+    ; Just as in the last loop, the incoming 64-bit carry variable (r11) may be 
+    ; negative. We apply the same 128-bit adapter pattern here to safely absorb it.
+    mov r15, r11                       ; Copy the leftover 64-bit carry.
+    sar r15, 63                        ; Sign-extend it.
+
     add rax, r11                       ; Absorb the previous carry from multiplication.
-    adc rdx, 0                         ; Pass the carry from addition to the (n + 2)-nd limb.
+    adc rdx, r15                       ; Pass the carry from addition to the (n + 2)-nd limb.
 
     and r10, r13                       ; Get the (n + 1)-st limb if (a_1 - a_0) was negative.
     sub rdx, r10                       ; Subtract the correction from the (n + 2)-nd limb.
@@ -156,7 +171,7 @@ arithmetic_sequence:
 
 ;
 ; Registers:
-;  - {rdx, rax, [rdi], [rdi + 8], ...} = (a_1 - a_0)(k - 1),
+;  - (rdx:rax:[rdi]:[rdi + 8]:...) = (a_1 - a_0)(k - 1),
 ;  - rsi holds the pointer to a_1,
 ;  - rcx holds the remaining limb count (n -> 0),
 ;  - r9  holds the limb index (0 -> n).
@@ -179,6 +194,7 @@ arithmetic_sequence:
     adc rdx, 0                         ; Absorb the carry from the previous addition
 
     ; To ensure ABI compliance pop the callee-saved registers back from the stack
+    pop r15
     pop r14
     pop r13
     pop r12
