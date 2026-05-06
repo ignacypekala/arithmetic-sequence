@@ -180,14 +180,14 @@ arithmetic_sequence:
 ;   i++;
 ;   n--;
 ; }
-.add_a1_to_result:
+.add_a0_to_result:
     mov r8, [rsi + r9 * 8]             ; Take the i-th limb of a_k.
     adc r8, [rdi + r9 * 8]             ; Add the i-th limb of a_0 with carry.
     mov [rsi + r9 * 8], r8             ; Save the result to a_k[i].
 
     inc r9                             ; i++
     dec rcx                            ; n--
-    jnz .add_a1_to_result
+    jnz .add_a0_to_result
 
     adc rax, 0                         ; Absorb the carry from the last addition
     adc rdx, 0                         ; Absorb the carry from the previous addition
