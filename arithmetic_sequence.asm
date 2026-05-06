@@ -158,14 +158,16 @@ arithmetic_sequence:
     ; Now the result will be corrected if the index offset was negative.
 
     and r8, r12                        ; Get the index offset if it was negative.
-    sub rax, r8                        ; Subtract it from the (n + 1)-th limb.
-    sbb rdx, 0                         ; Pass the borrow to the (n + 2)-nd limb.
+    sub rdx, r8                        ; Subtract it from the (n + 1)-th limb.
 
     ;
     ; The multiplication is complete and the result can
     ; be increased by a_1 to calculate the final a_k.
     ; 
     
+    mov r11, [rdi + rcx * 8 - 8]
+    sar r11, 63
+
     xor r8, r8                         ; Clear the flags before addition.
 
 ;
@@ -189,8 +191,8 @@ arithmetic_sequence:
     dec rcx                            ; n--
     jnz .add_a0_to_result
 
-    adc rax, 0                         ; Absorb the carry from the last addition
-    adc rdx, 0                         ; Absorb the carry from the previous addition
+    adc rax, r11                         ; Absorb the carry from the last addition
+    adc rdx, r11                         ; Absorb the carry from the previous addition
 
     ; To ensure ABI compliance pop the callee-saved registers back from the stack
     pop r15
