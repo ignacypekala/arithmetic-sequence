@@ -2,9 +2,9 @@ global arithmetic_sequence
 
 arithmetic_sequence:
     ; Author: Ignacy Pękała
-    ; Calculates the element k-th element of an arithmetic sequence a_n.
-    ; Takes the first two elements of the sequence, space for 64*n least
-    ; significant bits of the output, n - the unsigned number of limbs of a_0,
+    ; Calculates the k-th element of an arithmetic sequence a_n.
+    ; Takes the first two elements of the sequence, space for the 64*n least
+    ; significant bits of the output, n - an unsigned number of limbs of a_0,
     ; a_1 and a_k, and k - the signed index of the desired element.
     ;
     ; Parameters:
@@ -26,9 +26,11 @@ arithmetic_sequence:
     ; of an array i.e. the i-th limb.
     ;
     ; Return values
-    ; (rdx:rax:[rdi]:[rdi + 8]:...) = a_k
-    ; Note: rdi above refers to the initial value - the pointer to a_k's n least significant limbs.
-    ; 
+    ; (rdx:rax:[rdx]:[rdx + 8]:...) = a_k
+    ; Note: rdx above refers to the initial value - the pointer to an array for
+    ; a_k's n least significant limbs.
+    ;
+
     ; Ensure ABI compliance by preserving the value of callee-saved registers.
     push r12
     push r13
@@ -41,20 +43,27 @@ arithmetic_sequence:
     ; limbs are kept in the memory for a_k, while the additional (n + 1)-th limb
     ; is stored in the r10 register.
     ;
-    ; Because the subtraction signed integers (a_1 - a_0) can spill into the
-    ; register for the (n + 1)-th limb it has to be filled with 0s or 1s
-    ; depending on the sign of their difference.
+    ; Because the subtraction of signed integers (a_1 - a_0) can spill out into
+    ; the (n + 1)-th limb, the register r10 has to be filled with 0s or 1s
+    ; depending on the sign of the difference.
     ;
 
-    mov r11, [rdi + rcx * 8 - 8]       ; Take the most signifcant bit of a_0.
+    mov r11, [rdi + rcx * 8 - 8]       ; The most significant bit of a_0.
     sar r11, 63                        ; Extend the sign bit across the entire register.
-    mov r10, [rsi + rcx * 8 - 8]       ; Take the most signifcant bit of a_1.
+    mov r10, [rsi + rcx * 8 - 8]       ; Take the most significant bit of a_1.
     sar r10, 63                        ; Extend the sign bit across the entire register.
 
-    xor r9, r9                         ; Reset r9 and the flags so that sbb starts with no borrow.
+    xor r9, r9                         ; Reset r9 and flags so that sbb starts with no borrow.
 
 ;
-; while (rcx > 0) { a_k[i] = a_1[i] - a_0[i] - borrow; }
+; Registers:
+;  - ([rsi]:[rsi + 8]:...) = a_1,
+;  - ([rdi]:[rdi + 8]:...) = a_0,
+;  - r9  holds the limb index (0 -> n),
+;  - rdx holds *a_k
+;  - rcx holds the remaining limb count (n -> 0).
+;
+; while (n > 0) { a_k[i] = a_1[i] - a_0[i] - borrow; i++; n--; }
 ;
 .calculate_common_difference:
     mov rax, [rsi + r9 * 8]            ; Take i-th limb of a_1.
@@ -62,23 +71,23 @@ arithmetic_sequence:
     mov [rdx + r9 * 8], rax            ; Write the result to the i-th limb of a_k.
 
     ; This approach to iteration eliminates the need for cmp which would overwrite CF.
-    inc r9                             ; i++
-    dec rcx                            ; n--
+    inc r9
+    dec rcx
     jnz .calculate_common_difference
 
-    sbb r10, r11                       ; Propagate final loop borrow into the sign-extended (n+1)-th limb.
+    sbb r10, r11                       ; Propagate the borrow from the final iteration into the sign-extended (n+1)-th limb.
 
     ;
     ; Now that the subtraction is complete:
-    ; (r10:[rsi]:[rsi + 8]:...) = (a_1 - a_0)
+    ; (r10:[rdx]:[rdx + 8]:...) = (a_1 - a_0)
     ;
     ; The number (a_1 - a_0) will now be multiplied by (k) using unsigned
-    ; multiplication, while any introduced error will be subtracted in the proccess.
+    ; multiplication, while any introduced error will be subtracted in the process.
     ; 
     ; The possible error stems from the fact that a negative x interpreted as
     ; an unsigned integer equals to (x + 2^(64 * N)), where N is x's number of limbs. 
     ; Therefore two, non-mutually-exclusive scenarios have to be taken into account:
-    ; Let D = (a_1 - a_0), M = k
+    ; Let: D = (a_1 - a_0), M = k.
     ; - D is negative:
     ;       (D + 2^(64 * n)) * M = D * M + 2^(64 * n) * M
     ;       and the result needs correction by 2^(64 * n) * M
@@ -91,10 +100,10 @@ arithmetic_sequence:
     mov rsi, rdx                       ; Discard a_1 to hold *a_k.
 
     mov r12, r10                       ; Take the most significant limb of (a_1 - a_0).
-    sar r12, 63                        ; Extend the sign across the entire register.
+    sar r12, 63                        ; Create a mask to represent the sign of a_0.
 
     mov r13, r8                        ; Take the multiplier (k).
-    sar r13, 63                        ; Extend the sign across the entire register.
+    sar r13, 63                        ; Create a mask to represent the sign of a_1.
 
     xor r11, r11                       ; Clear the flags and r11 for multiplication.
 
@@ -117,26 +126,26 @@ arithmetic_sequence:
 ;
 .multiply_common_difference_by_index_offset:
     mov rax, [rsi + rcx * 8]           ; Take the i-th limb of (a_1 - a_0).
-    mov r14, rax                       ; Save it for later subtraction from the carry.
+    mov r14, rax                       ; Duplicate it for later subtraction from the carry.
     mul r8                             ; Multiply it by the index offset.
 
     ; Due to the error-correction subtraction, the 64-bit carry variable (r11) 
     ; from the previous limb may be negative. To correctly add it to the 128-bit 
-    ; accumulator (rdx:rax), we must sign-extend r11 into a temporary register (r15)
+    ; accumulator (rdx:rax), it must be sign-extended in a temporary register (r15)
     ; to act as the upper 64 bits during the subsequent addition.
     mov r15, r11                       ; Copy the carry.
     sar r15, 63                        ; Sign-expand it.
 
     add rax, r11                       ; Absorb the previous carry from multiplication.
-    adc rdx, r15                       ; Pass the carry from addition with carry nullifier.
+    adc rdx, r15                       ; Pass the carry from addition with the sign-extension.
     mov [rsi + rcx * 8], rax           ; Save the lower limb.
     
     and r14, r13                       ; Get the i-th limb of (a_1 - a_0) if the entire number was negative.
     sub rdx, r14                       ; Subtract the correction from the carry.
     mov r11, rdx                       ; Pass the carry for the next iteration.
 
-    inc rcx                            ; i++
-    dec r9                             ; n--
+    inc rcx
+    dec r9
     jnz .multiply_common_difference_by_index_offset
 
     ; The current most significant limb ((n + 1)-st) will now be multiplied manually.
@@ -187,8 +196,8 @@ arithmetic_sequence:
     adc r8, [rdi + r9 * 8]             ; Add the i-th limb of a_0 with carry.
     mov [rsi + r9 * 8], r8             ; Save the result to a_k[i].
 
-    inc r9                             ; i++
-    dec rcx                            ; n--
+    inc r9
+    dec rcx
     jnz .add_a0_to_result
 
     adc rax, r11                         ; Absorb the carry from the last addition
