@@ -4,11 +4,11 @@ NASMFLAGS=-f elf64 -w+all -w+error
 CFLAGS=-Wall -Wextra -std=c23 -O2
 CPPFLAGS=-Wall -Wextra -std=c++23 -O2
 
-NASMFLAGS += -g
-CFLAGS += -g
-CPPFLAGS += -g
-
-
+# NASMFLAGS += -g
+# CFLAGS += -g
+# CPPFLAGS += -g
+#
+#
 .PHONY: clean all
 all: arithmetic_sequence_example_c arithmetic_sequence_example_cpp
 
@@ -28,6 +28,12 @@ arithmetic_sequence_example_cpp: arithmetic_sequence_example_cpp.o arithmetic_se
 
 arithmetic_sequence_example_cpp.o: arithmetic_sequence_example.cpp
 	$(CPP) -c $(CPPFLAGS) -o $@ $<
+
+time.o: time.c 
+	$(CC) -c $^ -o $@ $(CFLAGS)
+
+time: time.o arithmetic_sequence.o
+	$(CC) $^ -o $@ $(CFLAGS)
 
 clean:
 	rm -f *.o arithmetic_sequence_example_c arithmetic_sequence_example_cpp
