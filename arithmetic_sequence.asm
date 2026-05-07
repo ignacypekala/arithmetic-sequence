@@ -90,7 +90,7 @@ arithmetic_sequence:
 
     mov rsi, rdx                       ; Discard a_1 to hold *a_k.
 
-    mov r12, [rsi + r9 * 8 - 8]        ; Take the most significant limb of (a_1 - a_0).
+    mov r12, r10                       ; Take the most significant limb of (a_1 - a_0).
     sar r12, 63                        ; Extend the sign across the entire register.
 
     mov r13, r8                        ; Take the multiplier (k).
