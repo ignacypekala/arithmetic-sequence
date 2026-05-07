@@ -17,7 +17,7 @@ arithmetic_sequence:
     ; Registers:
     ; r9, rcx - current limb index (i) and remaining limb counter
     ;           (roles alternate per loop)
-    ; r10, r11, r12, r13, rax, rdx - math
+    ; r10, r11, rax, rdx - math
     ; 
     ; Note: 
     ; The notation "(A:B:...)" is used to denote a concatenated
