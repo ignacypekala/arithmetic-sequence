@@ -33,8 +33,6 @@ arithmetic_sequence:
 
     ; Ensure ABI compliance by preserving the value of callee-saved registers.
     push r12
-    push r13
-    push r14
     push r15
 
     ;
@@ -102,9 +100,6 @@ arithmetic_sequence:
     mov r12, r10                       ; Take the most significant limb of (a_1 - a_0).
     sar r12, 63                        ; Create a mask to represent the sign of a_0.
 
-    mov r13, r8                        ; Take the multiplier (k).
-    sar r13, 63                        ; Create a mask to represent the sign of a_1.
-
     xor r11, r11                       ; Clear the flags and r11 for multiplication.
 
 ;
@@ -126,7 +121,6 @@ arithmetic_sequence:
 ;
 .multiply_common_difference_by_index_offset:
     mov rax, [rsi + rcx * 8]           ; Take the i-th limb of (a_1 - a_0).
-    mov r14, rax                       ; Duplicate it for later subtraction from the carry.
     mul r8                             ; Multiply it by the index offset.
 
     ; Due to the error-correction subtraction, the 64-bit carry variable (r11) 
@@ -138,10 +132,15 @@ arithmetic_sequence:
 
     add rax, r11                       ; Absorb the previous carry from multiplication.
     adc rdx, r15                       ; Pass the carry from addition with the sign-extension.
-    mov [rsi + rcx * 8], rax           ; Save the lower limb.
     
-    and r14, r13                       ; Get the i-th limb of (a_1 - a_0) if the entire number was negative.
-    sub rdx, r14                       ; Subtract the correction from the carry.
+    ; This approach to error correction eliminates the need for an additional register.
+    test r8, r8                        
+    jns .skip_loop_error_correction    ; Skip if the multiplier (k) wasn't negative.
+    sub rdx, [rsi + rcx * 8]           ; Subtract the correction from the carry.
+
+.skip_loop_error_correction:
+
+    mov [rsi + rcx * 8], rax           ; Save the lower limb.
     mov r11, rdx                       ; Pass the carry for the next iteration.
 
     inc rcx
@@ -161,8 +160,12 @@ arithmetic_sequence:
     add rax, r11                       ; Absorb the previous carry from multiplication.
     adc rdx, r15                       ; Pass the carry from addition to the (n + 2)-nd limb.
 
-    and r10, r13                       ; Get the (n + 1)-st limb if (a_1 - a_0) was negative.
-    sub rdx, r10                       ; Subtract the correction from the (n + 2)-nd limb.
+    ; Subtract the error if the multiplier was negative.
+    test r8, r8
+    jns .skip_final_error_correction
+    sub rdx, r10
+
+.skip_final_error_correction:
 
     ; Now the result will be corrected if the index offset was negative.
 
@@ -205,8 +208,6 @@ arithmetic_sequence:
 
     ; To ensure ABI compliance pop the callee-saved registers back from the stack
     pop r15
-    pop r14
-    pop r13
     pop r12
 
     ret
