@@ -31,9 +31,6 @@ arithmetic_sequence:
     ; a_k's n least significant limbs.
     ;
 
-    ; Ensure ABI compliance by preserving the value of callee-saved registers.
-    push r12
-
     ;
     ; Calculate the common difference of the arithmetic sequence by
     ; performing limb-by-limb subtraction (a_1 - a_0). The n least significant
@@ -96,9 +93,6 @@ arithmetic_sequence:
 
     mov rsi, rdx                       ; Discard a_1 to hold *a_k.
 
-    mov r12, r10                       ; Take the most significant limb of (a_1 - a_0).
-    sar r12, 63                        ; Create a mask to represent the sign of a_0.
-
     xor r11, r11                       ; Clear the flags and r11 for multiplication.
 
 ;
@@ -134,11 +128,11 @@ arithmetic_sequence:
     ; Although less efficient, than its branchless alternative, this approach
     ; to error correction eliminates the need for a separate register for the
     ; sign-extension mask.
-    test r8, r8                        
-    jns .skip_loop_error_correction    ; Skip if the multiplier (k) wasn't negative.
+    test r8, r8
+    jns .skip_loop_negative_index_offset_correction    
     sub rdx, [rsi + rcx * 8]           ; Subtract the correction from the carry.
 
-.skip_loop_error_correction:
+.skip_loop_negative_index_offset_correction:
 
     mov [rsi + rcx * 8], rax           ; Save the lower limb.
     mov r11, rdx                       ; Pass the carry for the next iteration.
@@ -162,15 +156,18 @@ arithmetic_sequence:
 
     ; Subtract the error if the multiplier was negative.
     test r8, r8
-    jns .skip_final_error_correction
+    jns .skip_final_negative_index_offset_correction
     sub rdx, r10
 
-.skip_final_error_correction:
+.skip_final_negative_index_offset_correction:
 
-    ; Now the result will be corrected if the index offset was negative.
-
-    and r8, r12                        ; Get the index offset if it was negative.
+    ; Now the result will be corrected if the common difference was negative.
+    
+    test r10, r10
+    jns .skip_negative_common_difference_correction
     sub rdx, r8                        ; Subtract it from the (n + 1)-th limb.
+
+.skip_negative_common_difference_correction:
 
     ;
     ; The multiplication is complete and the result can
@@ -205,8 +202,5 @@ arithmetic_sequence:
 
     adc rax, r11                         ; Absorb the carry from the last addition
     adc rdx, r11                         ; Absorb the carry from the previous addition
-
-    ; To ensure ABI compliance pop the callee-saved registers back from the stack
-    pop r12
 
     ret
