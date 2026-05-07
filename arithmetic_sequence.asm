@@ -33,7 +33,6 @@ arithmetic_sequence:
 
     ; Ensure ABI compliance by preserving the value of callee-saved registers.
     push r12
-    push r15
 
     ;
     ; Calculate the common difference of the arithmetic sequence by
@@ -123,17 +122,18 @@ arithmetic_sequence:
     mov rax, [rsi + rcx * 8]           ; Take the i-th limb of (a_1 - a_0).
     mul r8                             ; Multiply it by the index offset.
 
-    ; Due to the error-correction subtraction, the 64-bit carry variable (r11) 
-    ; from the previous limb may be negative. To correctly add it to the 128-bit 
-    ; accumulator (rdx:rax), it must be sign-extended in a temporary register (r15)
-    ; to act as the upper 64 bits during the subsequent addition.
-    mov r15, r11                       ; Copy the carry.
-    sar r15, 63                        ; Sign-expand it.
-
     add rax, r11                       ; Absorb the previous carry from multiplication.
-    adc rdx, r15                       ; Pass the carry from addition with the sign-extension.
+    adc rdx, 0
+
+    ; Due to the error-correction subtraction, the 64-bit carry from the
+    ; previous limb may have been negative. For it to be correctly added to the 128-bit 
+    ; accumulator (rdx:rax), its sign extension must be added to the older limb.
+    sar r11, 63
+    add rdx, r11 
     
-    ; This approach to error correction eliminates the need for an additional register.
+    ; Although less efficient, than its branchless alternative, this approach
+    ; to error correction eliminates the need for a separate register for the
+    ; sign-extension mask.
     test r8, r8                        
     jns .skip_loop_error_correction    ; Skip if the multiplier (k) wasn't negative.
     sub rdx, [rsi + rcx * 8]           ; Subtract the correction from the carry.
@@ -152,13 +152,13 @@ arithmetic_sequence:
     mov rax, r10                       ; Take the (n + 1)-st limb.
     mul r8                             ; Multiply it by the index offset.
 
-    ; Just as in the last loop, the incoming 64-bit carry variable (r11) may be 
-    ; negative. We apply the same 128-bit adapter pattern here to safely absorb it.
-    mov r15, r11                       ; Copy the leftover carry.
-    sar r15, 63                        ; Sign-extend it.
-
     add rax, r11                       ; Absorb the previous carry from multiplication.
-    adc rdx, r15                       ; Pass the carry from addition to the (n + 2)-nd limb.
+    adc rdx, 0
+
+    ; Just as in the last loop, the incoming 64-bit carry may have been
+    ; negative. We apply the same 128-bit adapter pattern here to safely absorb it.
+    sar r11, 63
+    add rdx, r11
 
     ; Subtract the error if the multiplier was negative.
     test r8, r8
@@ -207,7 +207,6 @@ arithmetic_sequence:
     adc rdx, r11                         ; Absorb the carry from the previous addition
 
     ; To ensure ABI compliance pop the callee-saved registers back from the stack
-    pop r15
     pop r12
 
     ret
