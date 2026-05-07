@@ -15,8 +15,8 @@ arithmetic_sequence:
     ; r8  -  k (signed)
     ;
     ; Registers:
-    ; r9, rcx - current limb index (i) and remaining limb counter
-    ;           (roles alternate per loop)
+    ; r9, - current limb index (i)
+    ; rcx - remaining limb counter (n - i)
     ; r10, r11, rax, rdx - math
     ; 
     ; Note: 
@@ -92,7 +92,7 @@ arithmetic_sequence:
 
     mov rsi, rdx                       ; Discard a_1 to hold *a_k.
 
-    xchg r9, rcx                       ; Resets the counters
+    xchg r9, rcx                       ; Resets the counters (lower size than mov, xor)
     xor r11, r11                       ; Clear the flags and r11 for multiplication.
 
 ;
@@ -176,9 +176,8 @@ arithmetic_sequence:
     mov r11, [rdi + r9 * 8 - 8]
     sar r11, 63
 
-    ; Xchg is not necessary here, as there is no third register to reset.
-    mov rcx, r9
-    xor r9, r9
+    xchg r9, rcx                       ; Reset the counters
+    clc                                ; Saves a byte over xor eax, eax
 
 ;
 ; Registers:
