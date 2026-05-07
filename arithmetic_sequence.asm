@@ -64,10 +64,9 @@ arithmetic_sequence:
     sbb rax, [rdi + r9 * 8]            ; Subtract the i-th limb of a_0.
     mov [rdx + r9 * 8], rax            ; Write the result to the i-th limb of a_k.
 
-    ; This approach to iteration eliminates the need for cmp which would overwrite CF.
     inc r9
-    dec rcx
-    jnz .calculate_common_difference
+    ; The loop instruction is used because it is smaller in size than the more efficient than a dec, jnz approach.
+    loop .calculate_common_difference
 
     sbb r10, r11                       ; Propagate the borrow from the final iteration into the sign-extended (n+1)-th limb.
 
@@ -93,6 +92,7 @@ arithmetic_sequence:
 
     mov rsi, rdx                       ; Discard a_1 to hold *a_k.
 
+    xchg r9, rcx                       ; Resets the counters
     xor r11, r11                       ; Clear the flags and r11 for multiplication.
 
 ;
@@ -113,7 +113,7 @@ arithmetic_sequence:
 ;  }
 ;
 .multiply_common_difference_by_index_offset:
-    mov rax, [rsi + rcx * 8]           ; Take the i-th limb of (a_1 - a_0).
+    mov rax, [rsi + r9 * 8]           ; Take the i-th limb of (a_1 - a_0).
     mul r8                             ; Multiply it by the index offset.
 
     add rax, r11                       ; Absorb the previous carry from multiplication.
@@ -130,16 +130,15 @@ arithmetic_sequence:
     ; sign-extension mask.
     test r8, r8
     jns .skip_loop_negative_index_offset_correction    
-    sub rdx, [rsi + rcx * 8]           ; Subtract the correction from the carry.
+    sub rdx, [rsi + r9 * 8]           ; Subtract the correction from the carry.
 
 .skip_loop_negative_index_offset_correction:
 
-    mov [rsi + rcx * 8], rax           ; Save the lower limb.
+    mov [rsi + r9 * 8], rax           ; Save the lower limb.
     mov r11, rdx                       ; Pass the carry for the next iteration.
 
-    inc rcx
-    dec r9
-    jnz .multiply_common_difference_by_index_offset
+    inc r9
+    loop .multiply_common_difference_by_index_offset
 
     ; The current most significant limb ((n + 1)-st) will now be multiplied manually.
 
@@ -174,10 +173,12 @@ arithmetic_sequence:
     ; be increased by a_1 to calculate the final a_k.
     ; 
     
-    mov r11, [rdi + rcx * 8 - 8]
+    mov r11, [rdi + r9 * 8 - 8]
     sar r11, 63
 
-    xor r8, r8                         ; Clear the flags before addition.
+    ; Xchg is not necessary here, as there is no third register to reset.
+    mov rcx, r9
+    xor r9, r9
 
 ;
 ; Registers:
@@ -192,13 +193,11 @@ arithmetic_sequence:
 ;   n--;
 ; }
 .add_a0_to_result:
-    mov r8, [rsi + r9 * 8]             ; Take the i-th limb of a_k.
-    adc r8, [rdi + r9 * 8]             ; Add the i-th limb of a_0 with carry.
-    mov [rsi + r9 * 8], r8             ; Save the result to a_k[i].
+    mov r8, [rdi + r9 * 8]             ; Take the i-th limb of a_0.
+    adc [rsi + r9 * 8], r8             ; Add it to a_k[i].
 
     inc r9
-    dec rcx
-    jnz .add_a0_to_result
+    loop .add_a0_to_result
 
     adc rax, r11                         ; Absorb the carry from the last addition
     adc rdx, r11                         ; Absorb the carry from the previous addition
