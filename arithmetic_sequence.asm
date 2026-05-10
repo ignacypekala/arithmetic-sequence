@@ -207,7 +207,7 @@ arithmetic_sequence:
         inc     r9
         loop    .add_a0_to_result
 
-        ; Absorb the carry from the last addition
+        ; Absorb the carry from the last addition.
         adc     rax, r11
         adc     rdx, r11
 
