@@ -50,7 +50,7 @@ arithmetic_sequence:
         mov     r10, [rsi + rcx * 8 - 8]        ; The most significant limb of a_1.
         sar     r10, 63                         ; Sign-extend it.
 
-        xor     r9, r9                          ; Reset r9 and flags so that sbb starts with no borrow.
+        xor     r9, r9                          ; Reset r9 and flags.
 
 ;
 ; Registers:
@@ -72,7 +72,7 @@ arithmetic_sequence:
         ; equivalent it is used here for the sake of machine code size reduction.
         loop    .calculate_common_difference
 
-        sbb     r10, r11                        ; Calculate the (n + 1)-th limb with the correct sign.
+        sbb     r10, r11                        ; Calculate the (n+1)-th limb with the correct sign.
 
         ;
         ; Now that the subtraction is complete:
@@ -132,14 +132,14 @@ arithmetic_sequence:
         sar     r11, 63
         add     rdx, r11
 
-        ; Although less efficient than its branchless  alternative (sign-extension mask), this approach
-        ; to error correction reduces the numbmer of necessary registers.
+        ; Although less efficient than its branchless  alternative (sign-extension mask), 
+        ; this approach to error correction reduces the numbmer of necessary registers.
 
-        ; If the index k is negative
+        ; If the index k is negative:
         test    r8, r8
         jns     .skip_loop_negative_index_correction
 
-        sub     rdx, [rsi + r9 * 8]             ; subtract the i-th limb of (a_1 - a_0) from the carry.
+        sub     rdx, [rsi + r9 * 8]             ; Subtract the i-th limb of (a_1-a_0) from the carry.
 
 .skip_loop_negative_index_correction:
 
