@@ -7,8 +7,8 @@ CPPFLAGS=-Wall -Wextra -std=c++23 -O2
 # NASMFLAGS += -g
 # CFLAGS += -g
 # CPPFLAGS += -g
-#
-#
+
+
 .PHONY: clean all
 all: arithmetic_sequence_example_c arithmetic_sequence_example_cpp
 
