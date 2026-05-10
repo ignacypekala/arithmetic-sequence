@@ -4,10 +4,11 @@ arithmetic_sequence:
     ; Arithmetic sequence 
     ; Author: Ignacy Pękała
     ;
-    ; Calculates the k-th element of an arithmetic sequence a_n.
-    ; Takes the first two elements of the sequence, space for the 64*n least
-    ; significant bits of the output, n - an unsigned number of limbs of a_0,
-    ; a_1 and a_k, and k - the signed index of the desired element.
+    ; Calculates the k-th element of an arithmetic sequence a_k.
+    ; Takes the first two elements of the sequence, a pointer to an allocated
+    ; memory buffer for the 64*n least significant bits of the output, n - an
+    ; unsigned number of limbs of a_0, a_1 and a_k, and k - the signed index of
+    ; the desired element.
     ;
     ; Parameters:
     ; rdi - *a_0 (two's complement)
@@ -28,8 +29,8 @@ arithmetic_sequence:
     ; of an array i.e. the i-th limb.
     ;
     ; Return values
-    ; (rdx:rax:[rdx]:[rdx + 8]:...) = a_k
-    ; Note: rdx above refers to the initial value - the pointer to an array for
+    ; (rdx:rax:[rdx]:[rdx + 8]:...:[rdx + 8 * n - 8]) = a_k
+    ; Note: rdx above refers to its initial value - the pointer to an array for
     ; a_k's n least significant limbs.
     ;
 
@@ -44,10 +45,10 @@ arithmetic_sequence:
     ; depending on the sign of the difference.
     ;
 
-    mov r11, [rdi + rcx * 8 - 8]       ; The most significant bit of a_0.
-    sar r11, 63                        ; Sign-extend it
-    mov r10, [rsi + rcx * 8 - 8]       ; The most significant bit of a_1.
-    sar r10, 63                        ; Sign-extend it
+    mov r11, [rdi + rcx * 8 - 8]       ; The most significant limb of a_0.
+    sar r11, 63                        ; Sign-extend it.
+    mov r10, [rsi + rcx * 8 - 8]       ; The most significant limb of a_1.
+    sar r10, 63                        ; Sign-extend it.
 
     xor r9, r9                         ; Reset r9 and flags so that sbb starts with no borrow.
 
@@ -67,8 +68,8 @@ arithmetic_sequence:
     mov [rdx + r9 * 8], rax            ; Write the result to the i-th limb of a_k.
 
     inc r9
-    ; Although the loop instruction is much less performant than the (dec, jnz) equivalent it is used
-    ; here for the sake of machine code size reduction.
+    ; Although the loop instruction is much less performant than the (dec, jnz)
+    ; equivalent it is used here for the sake of machine code size reduction.
     loop .calculate_common_difference
 
     sbb r10, r11                       ; Calculate the (n + 1)-th limb with the correct sign.
@@ -90,12 +91,14 @@ arithmetic_sequence:
     ; - if M is negative:
     ;       for each limb i: 
     ;           D[i] * (M + 2^64) = D[i] * M + D[i] * 2^64
-    ;           D[i] needs a correction by 2^64 * a_k[i]
+    ;           D[i] needs a correction by 2^64 * D[i]
     ;
 
-    mov rsi, rdx                       ; Discard *a_1 to hold *a_k.
+    ; Discard *a_1 to hold *a_k (rdx will be used as an accumulator during multiplication).
+    mov rsi, rdx
 
-    xchg r9, rcx                       ; Reset the iterators (lower instruction size than mov)
+    ; This approach is slower but results in a lower machine code size.
+    xchg r9, rcx                       ; Reset the iterators
     xor r11, r11
 
 ;
@@ -133,7 +136,7 @@ arithmetic_sequence:
     ; to error correction reduces the numbmer of necessary registers.
     test r8, r8
     jns .skip_loop_negative_index_correction ; If the index k is negative
-    sub rdx, [rsi + r9 * 8]                  ; subtract the correction from the carry.
+    sub rdx, [rsi + r9 * 8]                  ; subtract the i-th limb of (a_1 - a_0) from the carry.
 
 .skip_loop_negative_index_correction:
 
